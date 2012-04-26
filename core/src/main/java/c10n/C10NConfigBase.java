@@ -34,7 +34,7 @@ import java.util.ResourceBundle;
 import static c10n.share.utils.Preconditions.assertNotNull;
 
 public abstract class C10NConfigBase {
-  private final Map<String, C10NBundleBinder> bundleBinders = new HashMap<String, C10NBundleBinder>();
+  private final Map<NameAndBundle<String, Object>, C10NBundleBinder> bundleBinders = new HashMap<NameAndBundle<String, Object>, C10NBundleBinder>();
   private final Map<Class<?>, C10NImplementationBinder<?>> binders = new HashMap<Class<?>, C10NImplementationBinder<?>>();
   private final Map<Class<? extends Annotation>, C10NAnnotationBinder> annotationBinders = new HashMap<Class<? extends Annotation>, C10NAnnotationBinder>();
   private final List<C10NConfigBase> childConfigs = new ArrayList<C10NConfigBase>();
@@ -97,18 +97,39 @@ public abstract class C10NConfigBase {
 
   protected C10NBundleBinder bindBundle(String baseName) {
     C10NBundleBinder binder = new C10NBundleBinder();
-    bundleBinders.put(baseName, binder);
+    bundleBinders.put(new NameAndBundle<String, Object>(baseName, baseName), binder);
+    return binder;
+  }
+
+  /**
+   * This method will add a user provided resource bundle to the internal registry.<br/>
+   * Please make sure that lookupName is unique for each distinct resource bundle.
+   * Otherwise bundles might end up overwritten.
+   *
+   * @param bundle ready to use bundle provided by user
+   * @param lookupName name to be used for lookup
+   * @return binder added to registry
+   */
+  protected C10NBundleBinder bindBundle(ResourceBundle bundle, String lookupName) {
+    C10NBundleBinder binder = new C10NBundleBinder();
+    bundleBinders.put(new NameAndBundle<String, Object>(lookupName, bundle), binder);
     return binder;
   }
 
   List<ResourceBundle> getBundlesForLocale(Class<?> c10nInterface, Locale locale) {
     List<ResourceBundle> res = new ArrayList<ResourceBundle>();
-    for (Entry<String, C10NBundleBinder> entry : bundleBinders.entrySet()) {
+    for (Entry<NameAndBundle<String, Object>, C10NBundleBinder> entry : bundleBinders.entrySet()) {
       C10NBundleBinder binder = entry.getValue();
       if (binder.getBoundInterfaces().isEmpty()
               || binder.getBoundInterfaces().contains(c10nInterface)) {
-        res.add(ResourceBundle.getBundle(entry.getKey(), locale,
-                new EncodedResourceControl("UTF-8")));
+        // For string-based resource bundles, perform regular creation
+        if (entry.getKey().getType() instanceof String) {
+            res.add(ResourceBundle.getBundle(entry.getKey().getName(), locale,
+                    new EncodedResourceControl("UTF-8")));
+        } else {
+            // This is user-provided resource bundle
+            res.add((ResourceBundle) entry.getKey().getType());
+        }
       }
     }
     for (C10NConfigBase childConfig : childConfigs) {
